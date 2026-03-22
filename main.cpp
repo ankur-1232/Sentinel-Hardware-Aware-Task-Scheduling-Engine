@@ -7,6 +7,8 @@
 
 #include <atomic>
 
+#include <chrono>
+
 
 // 1. The Work (The "Fuel")
 long long fibonacci(int n) {
@@ -74,21 +76,41 @@ public:
 };
 
 int main() {
-    Sentinel pool(4);
-    std::atomic<int> packetCount{0}; // Atomic: Thread-safe counter without a mutex
+    // 1. Setup
+    unsigned int cores = std::thread::hardware_concurrency();
+    Sentinel pool(cores); 
+    std::atomic<int> packetCount{0};
 
-    // This thread simulates a Sensor sending data
+    std::cout << "System detected " << cores << " cores. Starting benchmark..." << std::endl;
+
+    // 2. Start Timer here (in the main thread)
+    auto start = std::chrono::high_resolution_clock::now();
+
+    // 3. The Producer (Sensor)
     std::thread sensor([&pool, &packetCount]() {
         for(int i = 0; i < 20; ++i) {
-            int dataPoint = 30 + (i % 10); // Simulating varying workloads
+            int dataPoint = 30 + (i % 10);
             pool.addTask(dataPoint);
             packetCount++;
+            // We sleep to simulate a real sensor, but the pool 
+            // works in the background while we sleep!
             std::this_thread::sleep_for(std::chrono::milliseconds(200));
         }
     });
 
-    sensor.join(); // Wait for sensor to finish sending 20 packets
+    sensor.join(); // Wait for sensor to finish sending
+
+    /* Note: At this point, the sensor is done, but the workers might 
+       still be finishing the last few Fibonacci numbers. 
+       A true 'Performance' test would wait for the pool to be empty.
+    */
+
+    auto end = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double> diff = end - start;
+
+    std::cout << "--- RESULTS ---" << std::endl;
     std::cout << "Total packets injected: " << packetCount.load() << std::endl;
+    std::cout << "Total Wall-Clock Time: " << diff.count() << " seconds." << std::endl;
 
     return 0;
 }
