@@ -5,6 +5,9 @@
 #include <condition_variable>
 #include <vector>
 
+#include <atomic>
+
+
 // 1. The Work (The "Fuel")
 long long fibonacci(int n) {
     if (n <= 1) return n;
@@ -71,16 +74,21 @@ public:
 };
 
 int main() {
-    Sentinel pool(4); // Create a pool with 4 worker threads
+    Sentinel pool(4);
+    std::atomic<int> packetCount{0}; // Atomic: Thread-safe counter without a mutex
 
-    // Add some heavy tasks
-    pool.addTask(35);
-    pool.addTask(40);
-    pool.addTask(42);
-    pool.addTask(38);
+    // This thread simulates a Sensor sending data
+    std::thread sensor([&pool, &packetCount]() {
+        for(int i = 0; i < 20; ++i) {
+            int dataPoint = 30 + (i % 10); // Simulating varying workloads
+            pool.addTask(dataPoint);
+            packetCount++;
+            std::this_thread::sleep_for(std::chrono::milliseconds(200));
+        }
+    });
 
-    // Give it a moment to process before the program ends
-    std::this_thread::sleep_for(std::chrono::seconds(5));
-    
+    sensor.join(); // Wait for sensor to finish sending 20 packets
+    std::cout << "Total packets injected: " << packetCount.load() << std::endl;
+
     return 0;
 }
